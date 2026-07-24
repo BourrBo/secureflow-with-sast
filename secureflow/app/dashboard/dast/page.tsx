@@ -1,63 +1,70 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+const sevConfig = {
+  critical: { color: '#FF6B6B', bg: 'rgba(192,55,42,0.15)' },
+  high:     { color: '#FFB020', bg: 'rgba(184,106,0,0.15)' },
+  medium:   { color: '#4D9FFF', bg: 'rgba(27,127,255,0.15)' },
+  low:      { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.07)' },
+  informational: { color: '#7C8AA5', bg: 'rgba(124,138,165,0.12)' },
+  info:          { color: '#7C8AA5', bg: 'rgba(124,138,165,0.12)' },
+}
 
-const endpoints = [
-  { id:1,  method:'POST', url:'/api/auth/login',         issue:'SQL Injection in username field',         severity:'critical', cwe:'CWE-89',  cvss:9.1, status:'open',     category:'Injection' },
-  { id:2,  method:'GET',  url:'/api/users/{id}',          issue:'IDOR — access other users data',          severity:'critical', cwe:'CWE-639', cvss:9.0, status:'open',     category:'Access Control' },
-  { id:3,  method:'GET',  url:'/api/admin/users',         issue:'Broken Access Control — no auth check',  severity:'critical', cwe:'CWE-285', cvss:9.8, status:'open',     category:'Access Control' },
-  { id:4,  method:'POST', url:'/api/comments',            issue:'Reflected XSS in comment body',           severity:'high',     cwe:'CWE-79',  cvss:7.4, status:'open',     category:'XSS' },
-  { id:5,  method:'GET',  url:'/api/search?q=',           issue:'Stored XSS via search parameter',         severity:'high',     cwe:'CWE-79',  cvss:7.1, status:'inreview', category:'XSS' },
-  { id:6,  method:'POST', url:'/api/payments/transfer',   issue:'Missing CSRF token validation',           severity:'high',     cwe:'CWE-352', cvss:7.5, status:'open',     category:'CSRF' },
-  { id:7,  method:'GET',  url:'/api/files/download',      issue:'Path Traversal — read arbitrary files',   severity:'high',     cwe:'CWE-22',  cvss:7.8, status:'open',     category:'Path Traversal' },
-  { id:8,  method:'POST', url:'/api/upload',              issue:'Unrestricted file upload — RCE possible', severity:'high',     cwe:'CWE-434', cvss:8.1, status:'open',     category:'File Upload' },
-  { id:9,  method:'GET',  url:'/api/health',              issue:'Sensitive data exposed in response',      severity:'medium',   cwe:'CWE-200', cvss:5.3, status:'resolved',  category:'Info Disclosure' },
-  { id:10, method:'GET',  url:'/api/config',              issue:'Missing security headers (CSP, HSTS)',    severity:'medium',   cwe:'CWE-693', cvss:5.1, status:'open',     category:'Misconfiguration' },
-  { id:11, method:'POST', url:'/api/auth/reset',          issue:'No rate limiting on password reset',      severity:'medium',   cwe:'CWE-307', cvss:5.9, status:'open',     category:'Auth' },
-  { id:12, method:'GET',  url:'/api/version',             issue:'Version disclosure in response header',   severity:'low',      cwe:'CWE-200', cvss:3.1, status:'resolved',  category:'Info Disclosure' },
-]
-
-const methodColors: Record<string,{color:string;bg:string}> = {
-  GET:    {color:'#00E576',bg:'rgba(0,229,118,0.1)'},
-  POST:   {color:'#4D9FFF',bg:'rgba(27,127,255,0.1)'},
-  PUT:    {color:'#FFB020',bg:'rgba(184,106,0,0.1)'},
-  DELETE: {color:'#FF6B6B',bg:'rgba(192,55,42,0.1)'},
-}
-const sevConfig: Record<string,{color:string;bg:string}> = {
-  critical:{color:'#FF6B6B',bg:'rgba(192,55,42,0.15)'},
-  high:    {color:'#FFB020',bg:'rgba(184,106,0,0.15)'},
-  medium:  {color:'#4D9FFF',bg:'rgba(27,127,255,0.15)'},
-  low:     {color:'rgba(255,255,255,0.4)',bg:'rgba(255,255,255,0.07)'},
-}
-const statusConfig: Record<string,{color:string;bg:string;label:string}> = {
-  open:     {color:'#FF6B6B',bg:'rgba(192,55,42,0.12)',label:'Open'},
-  inreview: {color:'#FFB020',bg:'rgba(184,106,0,0.12)',label:'In Review'},
-  resolved: {color:'#00E576',bg:'rgba(0,229,118,0.10)',label:'Resolved'},
-}
 const tabs = [{key:'all',label:'All',count:12},{key:'critical',label:'Critical',count:3},{key:'high',label:'High',count:5},{key:'resolved',label:'Resolved',count:2}]
 
 export default function DASTPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [scanning, setScanning] = useState(false)
   const [scanProgress, setScanProgress] = useState(0)
+  const [targetUrl, setTargetUrl] = useState("http://localhost:3000")
+  const [scanMode, setScanMode] = useState("standard")
+  const [findings, setFindings] = useState<any[]>([])
 
-  const handleScan = () => {
-    setScanning(true)
-    setScanProgress(0)
-    const interval = setInterval(() => {
-      setScanProgress(p => {
-        if (p >= 100) { clearInterval(interval); setScanning(false); return 0 }
-        return p + 10
+  const handleScan = async () => {
+    try {
+      setFindings([]); 
+      setScanning(true)
+
+      const response = await fetch("http://127.0.0.1:8000/api/dast/scan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          target_url: targetUrl,
+          scan_mode: scanMode,
+        }),
       })
-    }, 300)
+
+      if (!response.ok) {
+        throw new Error("Scan failed")
+      }
+
+      const data = await response.json()
+      console.log(data);
+
+      setFindings(data)
+    } catch (err) {
+      setFindings([]); 
+      console.error(err)
+      alert("DAST scan failed.")
+    } finally {
+      setScanning(false)
+    }
   }
 
-  const filtered = endpoints.filter(e => {
-    if (activeTab==='critical') return e.severity==='critical'
-    if (activeTab==='high')     return e.severity==='high'
-    if (activeTab==='resolved') return e.status==='resolved'
-    return true
-  })
+  const filtered = findings.filter((e: any) => {
+    if (activeTab === "critical")
+      return e.severity?.toLowerCase() === "critical";
+
+    if (activeTab === "high")
+      return e.severity?.toLowerCase() === "high";
+
+    if (activeTab === "resolved")
+      return false; // DAST findings don't have a resolved status yet
+
+    return true;
+  });
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden',fontFamily:'var(--body)'}}>
@@ -77,7 +84,7 @@ export default function DASTPage() {
           <button style={{padding:'7px 12px',borderRadius:7,border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'rgba(255,255,255,0.5)',fontSize:12,cursor:'pointer'}}>Export</button>
           <button onClick={handleScan} disabled={scanning}
             style={{padding:'7px 16px',borderRadius:7,border:'none',background:scanning?'rgba(27,127,255,0.5)':'#1B7FFF',color:'#fff',fontSize:12,fontWeight:600,cursor:scanning?'not-allowed':'pointer',fontFamily:'var(--font)',display:'flex',alignItems:'center',gap:6}}>
-            {scanning?<><span style={{display:'inline-block',width:12,height:12,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}/>Scanning {scanProgress}%</>:'▶ Start Scan'}
+            {scanning?<><span style={{display:'inline-block',width:12,height:12,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.7s linear infinite'}}/> Scanning...</>:'▶ Start Scan'}
           </button>
         </div>
       </div>
@@ -146,35 +153,133 @@ export default function DASTPage() {
             ))}
           </div>
           {/* Header */}
-          <div style={{display:'grid',gridTemplateColumns:'80px 2fr 3fr 100px 80px 70px 90px',padding:'9px 16px',borderBottom:'1px solid rgba(255,255,255,0.06)',background:'rgba(255,255,255,0.02)'}}>
-            {['Method','Endpoint','Issue','Category','CWE','CVSS','Status'].map(h=>(
+          <div style={{display:'grid',gridTemplateColumns:'120px 2fr 2fr 120px 120px 3fr',padding:'9px 16px',borderBottom:'1px solid rgba(255,255,255,0.06)',background:'rgba(255,255,255,0.02)'}}>
+            {[
+              'Severity',
+              'Title',
+              'Target',
+              'CWE',
+              'OWASP',
+              'Description'
+            ].map(h=>(
               <div key={h} style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'0.5px',color:'rgba(255,255,255,0.3)'}}>{h}</div>
             ))}
           </div>
           {/* Rows */}
-          {filtered.map((e,i)=>{
-            const mc=methodColors[e.method]||{color:'#aaa',bg:'rgba(255,255,255,0.07)'}
-            const sev=sevConfig[e.severity]
-            const st=statusConfig[e.status]
-            return(
-              <div key={e.id} style={{display:'grid',gridTemplateColumns:'80px 2fr 3fr 100px 80px 70px 90px',padding:'11px 16px',alignItems:'center',borderBottom:i<filtered.length-1?'1px solid rgba(255,255,255,0.04)':'none',transition:'background .12s'}}
-                onMouseEnter={el=>(el.currentTarget.style.background='rgba(255,255,255,0.02)')}
-                onMouseLeave={el=>(el.currentTarget.style.background='transparent')}>
-                <div><span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:4,background:mc.bg,color:mc.color,fontFamily:'var(--mono)'}}>{e.method}</span></div>
-                <div style={{fontSize:11,fontFamily:'var(--mono)',color:'#4D9FFF',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.url}</div>
-                <div>
-                  <div style={{fontSize:12,fontWeight:500,color:'#F0F4FF'}}>{e.issue}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:6,marginTop:3}}>
-                    <span style={{fontSize:10,fontWeight:500,padding:'1px 6px',borderRadius:4,background:sev.bg,color:sev.color}}>{e.severity}</span>
-                  </div>
-                </div>
-                <div style={{fontSize:10,color:'rgba(255,255,255,0.5)'}}>{e.category}</div>
-                <div style={{fontSize:10,fontFamily:'var(--mono)',color:'rgba(255,255,255,0.4)'}}>{e.cwe}</div>
-                <div style={{fontSize:13,fontWeight:500,color:e.cvss>=9?'#FF6B6B':e.cvss>=7?'#FFB020':'#4D9FFF'}}>{e.cvss}</div>
-                <div><span style={{fontSize:10,fontWeight:500,padding:'2px 8px',borderRadius:10,background:st.bg,color:st.color}}>{st.label}</span></div>
-              </div>
-            )
-          })}
+          {filtered.length === 0 ? (
+            <div
+              style={{
+                padding: "40px",
+                textAlign: "center",
+                color: "rgba(255,255,255,0.5)",
+                fontSize: 14,
+              }}
+            >
+              {scanning
+                ? "Scanning..."
+                : "No scan results available. Click 'Start Scan' to begin."}
+            </div>
+          ) : (
+            filtered.map((e, i) => {
+
+              const severity = (e.severity || "low").toLowerCase();
+              const sev =
+                sevConfig[severity as keyof typeof sevConfig] || sevConfig.low;
+return (
+  <div
+    key={`${e.rule}-${i}`}
+    style={{
+      display: "grid",
+      gridTemplateColumns: "120px 2fr 2fr 120px 120px 3fr",
+      padding: "11px 16px",
+      alignItems: "center",
+      borderBottom:
+        i < filtered.length - 1
+          ? "1px solid rgba(255,255,255,0.04)"
+          : "none",
+      transition: "background .12s",
+    }}
+    onMouseEnter={(el) =>
+      (el.currentTarget.style.background = "rgba(255,255,255,0.02)")
+    }
+    onMouseLeave={(el) =>
+      (el.currentTarget.style.background = "transparent")
+    }
+  >
+    <div>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          padding: "2px 7px",
+          borderRadius: 4,
+          background: sev.bg,
+          color: sev.color,
+          fontFamily: "var(--mono)",
+        }}
+      >
+        {e.severity}
+      </span>
+    </div>
+
+    <div
+      style={{
+        fontSize: 12,
+        fontWeight: 500,
+        color: "#F0F4FF",
+      }}
+    >
+      {e.title}
+    </div>
+
+    <div
+      style={{
+        fontSize: 11,
+        fontFamily: "var(--mono)",
+        color: "#4D9FFF",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {e.file}
+    </div>
+
+    <div
+      style={{
+        fontSize: 10,
+        color: "rgba(255,255,255,0.5)",
+      }}
+    >
+      {e.cwe}
+    </div>
+
+    <div
+      style={{
+        fontSize: 10,
+        fontFamily: "var(--mono)",
+        color: "rgba(255,255,255,0.4)",
+      }}
+    >
+      {e.owasp}
+    </div>
+
+    <div
+      style={{
+        fontSize: 11,
+        color: "rgba(255,255,255,0.6)",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+      title={e.description}
+    >
+      {e.description}
+    </div>
+  </div>
+);
+            })
+          )}
         </div>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
